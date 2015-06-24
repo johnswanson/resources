@@ -32,7 +32,7 @@
 (def accepted                 {:status 202})
 (def no-content               {:status 204})
 
-(defn throw-http-error [error] (throw+ error))
+(defn throw-http-error [error] (throw+ (merge {:type :http-error} error)))
 
 (defnk assert-no-errors! [service-available?
                           known-method?
@@ -45,22 +45,23 @@
                           valid-entity-length?
                           known-content-type?
                           processable?
-                          valid-content-header?
-                          exists?
-                          request-method]
+                          valid-content-header?]
+  ;; these things ALWAYS throw errors.
+  ;; we want to be able to throw them at any point throughout
+  ;; the process.
   (cond
-    (not service-available?)    (throw+ service-not-available)
-    (not known-method?)         (throw+ not-implemented)
-    uri-too-long?               (throw+ uri-too-long)
-    (not method-allowed?)       (throw+ method-not-allowed)
-    malformed?                  (throw+ malformed)
-    (not authorized?)           (throw+ unauthorized)
-    (not allowed?)              (throw+ forbidden)
-    (not valid-content-header?) (throw+ not-implemented)
-    (not known-content-type?)   (throw+ unsupported-media-type)
-    (not valid-entity-length?)  (throw+ request-entity-too-large)
-    (not acceptable?)           (throw+ not-acceptable)
-    (not processable?)          (throw+ unprocessable-entity)
+    (not service-available?)    (throw-http-error service-not-available)
+    (not known-method?)         (throw-http-error not-implemented)
+    uri-too-long?               (throw-http-error uri-too-long)
+    (not method-allowed?)       (throw-http-error method-not-allowed)
+    malformed?                  (throw-http-error malformed)
+    (not authorized?)           (throw-http-error unauthorized)
+    (not allowed?)              (throw-http-error forbidden)
+    (not valid-content-header?) (throw-http-error not-implemented)
+    (not known-content-type?)   (throw-http-error unsupported-media-type)
+    (not valid-entity-length?)  (throw-http-error request-entity-too-large)
+    (not acceptable?)           (throw-http-error not-acceptable)
+    (not processable?)          (throw-http-error unprocessable-entity)
     :else nil))
 
 (def resource*
@@ -87,9 +88,9 @@
    (fnk [request-method]
      (#{:get :post :put :delete :patch} request-method))
 
-   :url-too-long? (fnk [] false)
+   :uri-too-long? (fnk [] false)
 
-   :methods [:get]
+   :methods (fnk [] [:get])
    :methods-set
    (fnk [methods] (set methods))
 
@@ -110,7 +111,7 @@
    :known-content-type?
    (fnk [content-types headers request-method]
      (if (#{:put :post} request-method)
-       (some #{(headers "content-type")}
+       (some #{(get headers "content-type")}
              content-types)
        true))
 
@@ -123,7 +124,7 @@
    (fnk [available-media-types]
      (set available-media-types))
 
-   :accept (fnk [headers] (headers "accept"))
+   :accept (fnk [headers] (get headers "accept"))
    :accept-exists? (fnk [accept] accept)
    :media-type-available?
    (fnk [available-media-types-set accept-exists? accept]
@@ -131,15 +132,15 @@
          (= accept "*/*")
          (available-media-types-set accept)))
 
-   :accept-language (fnk [headers] (headers "accept-language"))
+   :accept-language (fnk [headers] (get headers "accept-language"))
    :accept-language-exists? (fnk [accept-language] accept-language)
    :language-available? (fnk [] true)
 
-   :accept-charset (fnk [headers] (headers "accept-charset"))
+   :accept-charset (fnk [headers] (get headers "accept-charset"))
    :accept-charset-exists? (fnk [accept-charset] accept-charset)
    :charset-available? (fnk [] true)
 
-   :accept-encoding (fnk [headers] (headers "accept-encoding"))
+   :accept-encoding (fnk [headers] (get headers "accept-encoding"))
    :accept-encoding-exists? (fnk [accept-encoding] accept-encoding)
    :encoding-available? (fnk [] true)
 
@@ -155,19 +156,9 @@
    :default-media-type-renderers (fnk [] {"application/edn" pr-str
                                           "text/plain"      str})
 
-   :media-type
-   (fnk [request available-media-types]
-     (let [accept (get-in request [:headers "accept"])
-           available-set (set available-media-types)]
-       (if (or (= accept "*/*") (not (available-set accept)))
-         (first available-media-types)
-         (available-set accept))))
+   :handle-ok (fnk [] nil)
 
-   :media-type-renderer
-   (fnk [media-type default-media-type-renderers media-type-renderers]
-     ((merge default-media-type-renderers media-type-renderers) media-type))
-
-   :response (fnk [] {:status 200 :body "hey" :headers {}})
+   :response (fnk [] {:status 200 :body "hello world" :headers {}})
    })
 
 (defn resource [m]
@@ -177,8 +168,6 @@
   (let [r (resource {:request request})]
     (try+ (do (assert-no-errors! r)
               (:response r))
-          (catch map? {:keys [status]}
-            {:status status
-             :body ""
-             :headers {}}))))
+          (catch map? {type :http-error :as thing}
+            thing))))
 
