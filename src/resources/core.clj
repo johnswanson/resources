@@ -3,36 +3,38 @@
             [plumbing.graph :as graph]
             [slingshot.slingshot :refer [throw+ try+]]))
 
-(def server-error             {:status 500})
-(def not-implemented          {:status 501})
-(def service-not-available    {:status 503})
+(def server-error             500)
+(def not-implemented          501)
+(def service-not-available    503)
 
-(def malformed                {:status 400})
-(def unauthorized             {:status 401})
-(def forbidden                {:status 403})
-(def not-found                {:status 404})
-(def method-not-allowed       {:status 405})
-(def not-acceptable           {:status 406})
-(def conflict                 {:status 409})
-(def gone                     {:status 410})
-(def precondition-failed      {:status 412})
-(def request-entity-too-large {:status 413})
-(def uri-too-long             {:status 414})
-(def unsupported-media-type   {:status 415})
-(def unprocessable-entity     {:status 422})
+(def malformed                400)
+(def unauthorized             401)
+(def forbidden                403)
+(def not-found                404)
+(def method-not-allowed       405)
+(def not-acceptable           406)
+(def conflict                 409)
+(def gone                     410)
+(def precondition-failed      412)
+(def request-entity-too-large 413)
+(def uri-too-long             414)
+(def unsupported-media-type   415)
+(def unprocessable-entity     422)
 
-(def multiple-representations {:status 300})
-(def moved-permanently        {:status 301})
-(def see-other                {:status 303})
-(def not-modified             {:status 304})
-(def moved-temporarily        {:status 307})
+(def multiple-representations 300)
+(def moved-permanently        301)
+(def see-other                303)
+(def not-modified             304)
+(def moved-temporarily        307)
 
-(def ok                       {:status 200})
-(def created                  {:status 201})
-(def accepted                 {:status 202})
-(def no-content               {:status 204})
+(def ok                       200)
+(def created                  201)
+(def accepted                 202)
+(def no-content               204)
 
-(defn throw-http-error [error] (throw+ (merge {:type :http-error} error)))
+(defn http-error! [error]
+  (throw+ {:type :http-error
+           :error error}))
 
 (defnk assert-no-errors! [service-available?
                           known-method?
@@ -50,18 +52,18 @@
   ;; we want to be able to throw them at any point throughout
   ;; the process.
   (cond
-    (not service-available?)    (throw-http-error service-not-available)
-    (not known-method?)         (throw-http-error not-implemented)
-    uri-too-long?               (throw-http-error uri-too-long)
-    (not method-allowed?)       (throw-http-error method-not-allowed)
-    malformed?                  (throw-http-error malformed)
-    (not authorized?)           (throw-http-error unauthorized)
-    (not allowed?)              (throw-http-error forbidden)
-    (not valid-content-header?) (throw-http-error not-implemented)
-    (not known-content-type?)   (throw-http-error unsupported-media-type)
-    (not valid-entity-length?)  (throw-http-error request-entity-too-large)
-    (not acceptable?)           (throw-http-error not-acceptable)
-    (not processable?)          (throw-http-error unprocessable-entity)
+    (not service-available?)    (http-error! service-not-available)
+    (not known-method?)         (http-error! not-implemented)
+    uri-too-long?               (http-error! uri-too-long)
+    (not method-allowed?)       (http-error! method-not-allowed)
+    malformed?                  (http-error! malformed)
+    (not authorized?)           (http-error! unauthorized)
+    (not allowed?)              (http-error! forbidden)
+    (not valid-content-header?) (http-error! not-implemented)
+    (not known-content-type?)   (http-error! unsupported-media-type)
+    (not valid-entity-length?)  (http-error! request-entity-too-large)
+    (not acceptable?)           (http-error! not-acceptable)
+    (not processable?)          (http-error! unprocessable-entity)
     :else nil))
 
 (def resource*
@@ -183,25 +185,97 @@
           media-type
           default-media-type-renderer-fn))
 
-   ;; the body of an OK response
-   :handle-ok (fnk [] "successful response")
+   :handle-500 (fnk [] "server-error")
+   :handle-501 (fnk [] "not-implemented")
+   :handle-503 (fnk [] "service-not-available")
 
-   :render-body (fnk [handle-ok media-type-renderer]
-                  (media-type-renderer handle-ok))
+   :handle-400 (fnk [] "malformed")
+   :handle-401 (fnk [] "unauthorized")
+   :handle-403 (fnk [] "forbidden")
+   :handle-404 (fnk [] "not-found")
+   :handle-405 (fnk [] "method-not-allowed")
+   :handle-406 (fnk [] "not-acceptable")
+   :handle-409 (fnk [] "conflict")
+   :handle-410 (fnk [] "gone")
+   :handle-412 (fnk [] "precondition-failed")
+   :handle-413 (fnk [] "request-entity-too-large")
+   :handle-414 (fnk [] "uri-too-long")
+   :handle-415 (fnk [] "unsupported-media-type")
+   :handle-422 (fnk [] "unprocessable-entity")
 
-   :render-ok-body (fnk [handle-ok media-type-renderer]
-                     (media-type-renderer handle-ok))
+   :handle-300 (fnk [] "multiple-representations")
+   :handle-301 (fnk [] "moved-permanently")
+   :handle-303 (fnk [] "see-other")
+   :handle-304 (fnk [] "not-modified")
+   :handle-307 (fnk [] "moved-temporarily")
 
-   :response (fnk [render-ok-body] {:status 200 :body render-ok-body :headers {}})
+   :handle-200 (fnk [] "ok")
+   :handle-201 (fnk [] "created")
+   :handle-202 (fnk [] "accepted")
+   :handle-204 (fnk [] "no-content")
+
+   :status (fnk [request-method]
+             (case request-method
+               :get 200
+               :post 201
+               200))
+
+   :body-rendered
+   (fnk [body-raw media-type-renderer]
+     (media-type-renderer body-raw))
+
+   :body-raw (fnk [status
+                   handle-500
+                   handle-501
+                   handle-503
+                   handle-400
+                   handle-401
+                   handle-403
+                   handle-404
+                   handle-405
+                   handle-406
+                   handle-409
+                   handle-410
+                   handle-412
+                   handle-413
+                   handle-414
+                   handle-415
+                   handle-422
+                   handle-300
+                   handle-301
+                   handle-303
+                   handle-304
+                   handle-307
+                   handle-200
+                   handle-201
+                   handle-202
+                   handle-204
+                   :as resource]
+               (let [kw (keyword (format "handle-%d" status))
+                     body (resource kw)]
+                 (when-not body (http-error! server-error))
+                 body))
+
+   :response (fnk [body-rendered status] {:status status
+                                           :body body-rendered
+                                           :headers {}})
    })
 
 (defn resource [m]
-  (graph/compile (merge resource* m)))
-
-(defn run [resource request]
-  (let [r (resource {:request request})]
-    (try+ (do (assert-no-errors! r)
-              (:response r))
-          (catch map? {type :http-error :as thing}
-            thing))))
-
+  (let [graph (merge resource* m)
+        compiled (graph/lazy-compile graph)]
+    (fn [request]
+      (let [response (compiled {:request request})]
+        (try+ (do (assert-no-errors! response)
+                  ((:request-method request) response)
+                  (:response response))
+              (catch [:type :http-error] {status :error}
+                (let [new-graph (assoc graph :status (fnk [] status))
+                      compiled (graph/lazy-compile new-graph)
+                      response (compiled {:request request})]
+                  (:response response)))
+              (catch Object _
+                (let [new-graph (assoc graph :status (fnk [] server-error))
+                      compiled (graph/lazy-compile new-graph)
+                      response (compiled {:request request})]
+                  (:response response))))))))
