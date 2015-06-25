@@ -168,28 +168,29 @@
 
    :multiple-representations? (fnk [] false)
 
-   :media-type-renderers (fnk [] {})
-   :default-media-type-renderers (fnk [] {"application/edn" pr-str
-                                          "text/plain"      str})
+   :media-type-renderers (fnk [] {"application/edn" pr-str
+                                  "text/plain"      str})
 
-   :all-media-type-renderers (fnk [media-type-renderers
-                                   default-media-type-renderers]
-                               (merge default-media-type-renderers
-                                      media-type-renderers))
+   :default-media-type-renderer (fnk [] "text/plain")
+   :default-media-type-renderer-fn
+   (fnk [default-media-type-renderer
+         media-type-renderers]
+     (get media-type-renderers default-media-type-renderer))
 
-   :media-type-renderer (fnk [all-media-type-renderers media-type]
-                            (get all-media-type-renderers media-type))
+   :media-type-renderer
+   (fnk [media-type-renderers media-type default-media-type-renderer-fn]
+     (get media-type-renderers
+          media-type
+          default-media-type-renderer-fn))
 
    ;; the body of an OK response
    :handle-ok (fnk [] "successful response")
 
-   :render-ok-body (fnk [handle-ok
-                         media-type-renderer
-                         media-type-available?
-                         default-media-type-renderers]
-                     (if media-type-available?
-                       (media-type-renderer handle-ok)
-                       ((first (vals default-media-type-renderers)) handle-ok)))
+   :render-body (fnk [handle-ok media-type-renderer]
+                  (media-type-renderer handle-ok))
+
+   :render-ok-body (fnk [handle-ok media-type-renderer]
+                     (media-type-renderer handle-ok))
 
    :response (fnk [render-ok-body] {:status 200 :body render-ok-body :headers {}})
    })
