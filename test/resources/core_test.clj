@@ -31,14 +31,17 @@
                      (when-let [user (users email)]
                        (when (= password (:password user))
                          user)))
-             :allowed? (fnk [user] user)}))
+             :allowed? (fnk [user] user)
+             :available-media-types (fnk [] ["text/plain" "application/edn"])
+             :handle-ok (fnk [] {:hello :world})}))
 
 (deftest authorization
   (testing "successful auth"
     (let [response (run auth-resource
-                     (request {:params {:email "bob" :password "password"}}))]
+                     (request {:params {:email "bob" :password "password"}
+                               :headers {"accept" "application/edn"}}))]
       (is (= (:status response) 200))
-      (is (= (:body response) "hello world"))))
+      (is (= (:body response) (pr-str {:hello :world})))))
   (testing "unsuccessful auth"
     (let [response (run auth-resource
                      (request {:params {:email "jim" :password "password"}}))]

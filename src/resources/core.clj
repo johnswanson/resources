@@ -126,11 +126,17 @@
 
    :accept (fnk [headers] (get headers "accept"))
    :accept-exists? (fnk [accept] accept)
+   :media-type
+   (fnk [available-media-types-set available-media-types accept-exists? accept]
+     (when-not (empty? available-media-types-set)
+       (cond
+         (not accept-exists?)               (first available-media-types)
+         (= accept "*/*")                   (first available-media-types)
+         (available-media-types-set accept) (available-media-types-set accept)
+         :else nil)))
    :media-type-available?
-   (fnk [available-media-types-set accept-exists? accept]
-     (or (not accept-exists?)
-         (= accept "*/*")
-         (available-media-types-set accept)))
+   (fnk [media-type]
+     media-type)
 
    :accept-language (fnk [headers] (get headers "accept-language"))
    :accept-language-exists? (fnk [accept-language] accept-language)
@@ -147,18 +153,45 @@
    :processable? (fnk [] true)
 
    :exists? (fnk [] true)
-   :if-match-exists? (fnk [] false)
-   :if-unmodified-since-exists? (fnk [] false)
-   :if-none-match-exists? (fnk [] false)
-   :if-modified-since-exists? (fnk [] false)
+
+   :if-match (fnk [headers] (get headers "if-match"))
+   :if-match-exists? (fnk [if-match] if-match)
+
+   :if-unmodified-since (fnk [headers] (get headers "if-unmodified-since"))
+   :if-unmodified-since-exists? (fnk [if-unmodified-since] if-unmodified-since)
+
+   :if-none-match (fnk [headers] (get headers "if-none-match"))
+   :if-none-match-exists? (fnk [if-none-match] if-none-match)
+
+   :if-modified-since (fnk [headers] (get headers "if-modified-since"))
+   :if-modified-since-exists? (fnk [if-modified-since] if-modified-since)
+
    :multiple-representations? (fnk [] false)
 
+   :media-type-renderers (fnk [] {})
    :default-media-type-renderers (fnk [] {"application/edn" pr-str
                                           "text/plain"      str})
 
-   :handle-ok (fnk [] nil)
+   :all-media-type-renderers (fnk [media-type-renderers
+                                   default-media-type-renderers]
+                               (merge default-media-type-renderers
+                                      media-type-renderers))
 
-   :response (fnk [] {:status 200 :body "hello world" :headers {}})
+   :media-type-renderer (fnk [all-media-type-renderers media-type]
+                            (get all-media-type-renderers media-type))
+
+   ;; the body of an OK response
+   :handle-ok (fnk [] "successful response")
+
+   :render-ok-body (fnk [handle-ok
+                         media-type-renderer
+                         media-type-available?
+                         default-media-type-renderers]
+                     (if media-type-available?
+                       (media-type-renderer handle-ok)
+                       ((first (vals default-media-type-renderers)) handle-ok)))
+
+   :response (fnk [render-ok-body] {:status 200 :body render-ok-body :headers {}})
    })
 
 (defn resource [m]
